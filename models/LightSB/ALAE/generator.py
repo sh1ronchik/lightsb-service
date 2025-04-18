@@ -26,7 +26,6 @@ labels = ["young"]
 
 def sample(cfg, logger, filenames, result_path, delta, result_num):
     print(filenames)
-    torch.cuda.set_device(0)
     model = Model(
         startf=cfg.MODEL.START_CHANNEL_COUNT,
         layer_count=cfg.MODEL.LAYER_COUNT,
@@ -39,7 +38,6 @@ def sample(cfg, logger, filenames, result_path, delta, result_num):
         generator=cfg.MODEL.GENERATOR,
         encoder=cfg.MODEL.ENCODER,
     )
-    model.cuda(0)
     model.eval()
     model.requires_grad_(False)
 
@@ -108,7 +106,7 @@ def sample(cfg, logger, filenames, result_path, delta, result_num):
         x = (
             torch.tensor(
                 np.asarray(im, dtype=np.float32), device="cpu", requires_grad=True
-            ).cuda()
+            ).to(device)
             / 127.5
             - 1.0
         )
@@ -132,7 +130,7 @@ def sample(cfg, logger, filenames, result_path, delta, result_num):
             .numpy()
         )
 
-        latents_original = encode(x[None, ...].cuda())
+        latents_original = encode(x[None, ...].to(device))
         latents = latents_original[0, 0].clone()
         latents -= model.dlatent_avg.buff.data[0]
 
@@ -251,8 +249,6 @@ def _run(rank, world_size, fn, defaults, write_log, no_cuda, args):
 
     if not no_cuda:
         torch.set_default_tensor_type("torch.cuda.FloatTensor")
-        device = torch.cuda.current_device()
-        print("Running on ", torch.cuda.get_device_name(device))
 
     args.distributed = world_size > 1
     args_to_pass = dict(
@@ -338,6 +334,7 @@ def run(
 
 if __name__ == "__main__":
     gpu_count = 1
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     run(
         sample,
         get_cfg_defaults(),
@@ -345,4 +342,5 @@ if __name__ == "__main__":
         default_config="configs/ffhq.yaml",
         world_size=gpu_count,
         write_log=False,
+        no_cuda=(not torch.cuda.is_available()),
     )
